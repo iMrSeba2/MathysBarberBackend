@@ -329,7 +329,20 @@ app.post('/reservations', async (req, res) => {
     }
 
     const dateId = dateResult.rows[0].date_id;
-
+    
+    //existe la reserva
+    const bookingResult = await pool.query(`
+      SELECT * FROM bookings
+      WHERE user_id = $1
+      AND barber_id = $2
+      AND cut_id = $3
+      AND date_id = $4
+      AND hour_id = $5
+      AND time_done = FALSE
+    `, [userId, barberId, cutId, dateId, hour]);
+    if(bookingResult.rows.length > 0){
+      return res.status(400).json({ error: 'La reserva ya existe' });
+    }
     // Insertar la reserva en la base de datos
     await pool.query(`
       INSERT INTO bookings (user_id,barber_id, cut_id, date_id, hour_id, time_done)
