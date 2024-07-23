@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
+const moment = require('moment-timezone'); // Usamos moment-timezone para manejar la zona horaria
 
 dotenv.config();
 
@@ -14,26 +15,52 @@ const pool = new Pool({
   }
 });
 
-const createUsersTable = async () => {
-    const createTableQuery = `
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        phone VARCHAR(15),
-        email VARCHAR(100) UNIQUE NOT NULL,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL
-      );
-    `;
-  
-    try {
-      await pool.query(createTableQuery);
-      console.log('Tabla "users" creada exitosamente.');
-    } catch (error) {
-      console.error('Error creando la tabla "users":', error);
+const createDateTable = async () => {
+  const dropTableQuery = `
+    DROP TABLE IF EXISTS date;
+  `;
+  const createTableQuery = `
+    CREATE TABLE IF NOT EXISTS date (
+      date_id SERIAL PRIMARY KEY,
+      date DATE NOT NULL UNIQUE
+    );
+  `;
+
+  try {
+    await pool.query(dropTableQuery);
+    await pool.query(createTableQuery);
+    console.log('Table "date" created successfully.');
+
+    // Insert dates into the table
+    const today = moment().tz('America/Santiago').startOf('day');
+    const sunday = today.clone().day(7); // El próximo domingo
+
+    const dates = [];
+    let day = today;
+
+    while (day.isSameOrBefore(sunday)) {
+      dates.push(day.format('YYYY-MM-DD'));
+      day = day.add(1, 'day');
     }
-  };
-  
-  // Llama a la función para crear la tabla cuando inicies el servidor
-  createUsersTable();
+
+    const insertDateQuery = `
+      INSERT INTO date (date)
+      VALUES ($1)
+      ON CONFLICT (date) DO NOTHING;
+    `;
+
+    for (const date of dates) {
+      await pool.query(insertDateQuery, [date]);
+    }
+    console.log('Dates inserted successfully.');
+  } catch (error) {
+    console.error('Error creating or inserting data into the "date" table:', error);
+  }
+};
+
+// Call the function to create the table and insert dates
+createDateTable();
+
+
+
   
