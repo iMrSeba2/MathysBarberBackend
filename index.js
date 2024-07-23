@@ -346,10 +346,12 @@ app.post('/reservations', async (req, res) => {
       },
     });
 
+    // Obtener el correo electrónico del usuario
+    const userResult = await pool.query('SELECT email FROM users WHERE user_id = $1', [userId]);
     // Configurar el contenido del correo electrónico
     const mailOptions = {
       from: 'mauricie.seba@gmail.com',
-      to: email,
+      to: userResult.rows[0].email,
       subject: 'Recuperación de contraseña',
       text: `Su reserva ha sido realizada con éxito. Su hora es a las ${hour} del día ${date}`,
     };
@@ -361,7 +363,7 @@ app.post('/reservations', async (req, res) => {
       res.status(500).send('Error al enviar el correo de recuperación');
     }
 
-    res.status(200).json({ message: 'Reservation successful' });
+    res.status(200).json(newUser.rows[0]);
   } catch (error) {
     console.error('Error making reservation:', error.message);
     res.status(500).json({ error: 'Error making reservation: ' + error.message });
