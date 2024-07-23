@@ -222,7 +222,6 @@ app.get('/cuts', async (req, res) => {
 
 app.get('/available-hours', async (req, res) => {
   const { barberName, date } = req.query;
-
   try {
     // Obtener la hora actual del servidor en la zona horaria de Chile
     const currentTime = moment().tz('America/Santiago').format('HH:mm:ss');
@@ -241,15 +240,23 @@ app.get('/available-hours', async (req, res) => {
 
     // Convertir la fecha a un formato que pueda ser comparado
     const formattedDate = moment(date).format('YYYY-MM-DD');
-
     // Verificar si la fecha es mayor a la fecha actual
     if (formattedDate > moment().tz('America/Santiago').format('YYYY-MM-DD')) {
       // Obtener las horas disponibles
       const availableHours = await pool.query(`
-        SELECT h.hour_id, h.hour    
+        SELECT h.hour_id, h.hour
         FROM hours h
-      `);
+        WHERE h.hour_id NOT IN (
+            SELECT b.hour_id
+            FROM bookings b
+            JOIN date d ON b.date_id = d.date_id
+            WHERE b.barber_id = $1
+              AND d.date = $2
+              AND b.time_done = FALSE
+        )
+        ORDER BY h.hour;
 
+      `,[barberId, formattedDate]);
       return res.status(200).json(availableHours.rows);
     } else {
       // Obtener las horas disponibles que no están reservadas
@@ -267,7 +274,6 @@ app.get('/available-hours', async (req, res) => {
         )
         ORDER BY h.hour;
       `, [currentTime, barberId, formattedDate]);
-
       return res.status(200).json(availableHours.rows);
     }
     
