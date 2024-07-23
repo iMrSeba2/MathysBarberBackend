@@ -46,6 +46,30 @@ app.post('/users', async (req, res) => {
     'INSERT INTO users (name, phone, email, username, password) VALUES ($1, $2, $3, $4, $5) RETURNING *',
     [name, phone, email, username, password]
   );
+
+  // Configurar el transportador de Nodemailer
+  const transporter = nodemailer.createTransport({
+    service: 'Gmail',
+    auth: {
+      user: 'mauricie.seba@gmail.com', // Tu email
+      pass: 'yctj sdjx qols rbdf', // Tu contraseña
+    },
+  });
+
+  // Configurar el contenido del correo electrónico
+  const mailOptions = {
+    from: 'mauricie.seba@gmail.com',
+    to: email,
+    subject: 'Recuperación de contraseña',
+    text: `Su cuenta ha sido creada con éxito. Su usuario es ${username} y su contraseña es ${password}`,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error('Error al enviar el correo de recuperación:', error);
+    res.status(500).send('Error al enviar el correo de recuperación');
+  }
   res.json(newUser.rows[0]);
 });
 
@@ -311,6 +335,31 @@ app.post('/reservations', async (req, res) => {
       INSERT INTO bookings (user_id,barber_id, cut_id, date_id, hour_id, time_done)
       VALUES ($1, $2, $3, $4, $5, FALSE)
     `, [userId,barberId, cutId, dateId, hour]);
+
+    
+    // Configurar el transportador de Nodemailer
+    const transporter = nodemailer.createTransport({
+      service: 'Gmail',
+      auth: {
+        user: 'mauricie.seba@gmail.com', // Tu email
+        pass: 'yctj sdjx qols rbdf', // Tu contraseña
+      },
+    });
+
+    // Configurar el contenido del correo electrónico
+    const mailOptions = {
+      from: 'mauricie.seba@gmail.com',
+      to: email,
+      subject: 'Recuperación de contraseña',
+      text: `Su reserva ha sido realizada con éxito. Su hora es a las ${hour} del día ${date}`,
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error('Error al enviar el correo de recuperación:', error);
+      res.status(500).send('Error al enviar el correo de recuperación');
+    }
 
     res.status(200).json({ message: 'Reservation successful' });
   } catch (error) {
