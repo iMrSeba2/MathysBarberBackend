@@ -490,6 +490,17 @@ app.post('/update-completion-status', async (req, res) => {
   }
 });
 
+app.delete('/delete-reservation', async (req, res) => {
+  const { bookingId } = req.body;
+  try {
+    await pool.query('DELETE FROM bookings WHERE booking_id = $1', [bookingId]);
+    res.status(200).json({ message: 'Reserva eliminada' });
+  } catch (error) {
+    console.error('Error deleting reservation:', error.message);
+    res.status(500).json({ error: 'Error deleting reservation: ' + error.message });
+  }
+});
+
 // Programar la tarea para que se ejecute cada domingo a las 23:00 (11:00 PM) hora de Santiago
 cron.schedule('0 23 * * SUN', () => {
     console.log('Generating weekly dates...');
