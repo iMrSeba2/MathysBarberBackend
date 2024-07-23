@@ -445,12 +445,12 @@ app.get('/user-reservations', async (req, res) => {
 });
 
 
-// Programar la tarea para que se ejecute todos los domingos a las 23:00 hora de Chile
-cron.schedule('0 13 * * MON', () => {
-  console.log('Generating weekly dates...');
-  generateWeeklyDates();
+// Programar la tarea para que se ejecute cada domingo a las 23:00 (11:00 PM) hora de Santiago
+cron.schedule('0 23 * * SUN', () => {
+    console.log('Generating weekly dates...');
+    generateWeeklyDates();
 }, {
-  timezone: "America/Santiago"
+    timezone: "America/Santiago"
 });
 
 
