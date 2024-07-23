@@ -60,7 +60,7 @@ app.post('/users', async (req, res) => {
   const mailOptions = {
     from: 'mauricie.seba@gmail.com',
     to: email,
-    subject: 'Recuperación de contraseña',
+    subject: 'Cuenta Creada con Éxito',
     text: `Su cuenta ha sido creada con éxito. Su usuario es ${username} y su contraseña es ${password}`,
   };
 
@@ -362,7 +362,9 @@ app.post('/reservations', async (req, res) => {
     // Obtener el correo electrónico del usuario
     const userResult = await pool.query('SELECT email FROM users WHERE user_id = $1', [userId]);
     // Configurar el contenido del correo electrónico
-    
+
+    const horas = await pool.query('SELECT hour FROM hours WHERE hour_id = $1', [hour]);
+    const horaEspecifica = horas.rows[0].hour;
     // Verifica que el usuario fue encontrado
     if (userResult.rows.length === 0) {
       throw new Error('Usuario no encontrado');
@@ -373,8 +375,8 @@ app.post('/reservations', async (req, res) => {
     const mailOptions = {
       from: 'mauricie.seba@gmail.com',
       to: userEmail,
-      subject: 'Recuperación de contraseña',
-      text: `Su reserva ha sido realizada con éxito. Su hora es a las ${hour} del día ${date}`,
+      subject: 'Reserva Realizada con Éxito',
+      text: `Su reserva ha sido realizada con éxito. Su hora es a las ${horaEspecifica} del día ${date}`,
     };
 
     try {
@@ -395,9 +397,21 @@ app.get('/barber-reservations', async (req, res) => {
   const { barberId } = req.query;
 
   try {
+    const currentDate = new Date();
+    const currentDayOfWeek = currentDate.getDay(); // 0 (Sunday) to 6 (Saturday)
+    const daysSinceMonday = currentDayOfWeek === 0 ? 6 : currentDayOfWeek - 1; // Adjust if today is Sunday
+
+    const startOfWeek = new Date(currentDate);
+    startOfWeek.setDate(currentDate.getDate() - daysSinceMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+
+    endOfWeek.setDate(startOfWeek.getDate() + 6); 
+
     let query = `
-      SELECT b.booking_id, b.user_id, u.username as user_name, b.barber_id, bu.username as barber_name, 
-             b.cut_id, c.name as cut_name, b.date_id, d.date, b.hour_id, h.hour, b.time_done
+      SELECT b.booking_id, b.user_id, u.name as user_name, u.phone as user_phone, b.barber_id, bu.username as barber_name, 
+             b.cut_id, c.name as cut_name, b.date_id, TO_CHAR(d.date, 'YYYY-MM-DD') as date, b.hour_id, h.hour, b.time_done
       FROM bookings b
       JOIN users u ON b.user_id = u.user_id
       JOIN users bu ON b.barber_id = bu.user_id
@@ -405,17 +419,19 @@ app.get('/barber-reservations', async (req, res) => {
       JOIN date d ON b.date_id = d.date_id
       JOIN hours h ON b.hour_id = h.hour_id
       WHERE b.barber_id = $1
+        AND d.date >= $2
+        AND d.date <= $3
       ORDER BY d.date, h.hour
     `;
 
-    const result = await pool.query(query, [barberId]);
-
+    const result = await pool.query(query, [barberId, startOfWeek, endOfWeek]);
     res.status(200).json(result.rows);
   } catch (error) {
     console.error('Error fetching reservations:', error.message);
     res.status(500).json({ error: 'Error fetching reservations: ' + error.message });
   }
 });
+
 
 app.get('/user-reservations', async (req, res) => {
   const { userId } = req.query;
@@ -444,6 +460,35 @@ app.get('/user-reservations', async (req, res) => {
   }
 });
 
+app.get('/available-dates', async (req, res) => {
+  const { barberId } = req.query;
+
+  try {
+    const query = `
+      SELECT DISTINCT TO_CHAR(d.date, 'YYYY-MM-DD') as date
+      FROM bookings b
+      JOIN date d ON b.date_id = d.date_id
+      WHERE b.barber_id = $1
+      ORDER BY TO_CHAR(d.date, 'YYYY-MM-DD')
+    `;
+    const result = await pool.query(query, [barberId]);
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error('Error fetching available dates:', error.message);
+    res.status(500).json({ error: 'Error fetching available dates: ' + error.message });
+  }
+});
+
+app.post('/update-completion-status', async (req, res) => {
+  const { bookingId, time_done } = req.body;
+  try {
+    await pool.query('UPDATE bookings SET time_done = $1 WHERE booking_id = $2', [time_done, bookingId]);
+    res.status(200).json({ message: 'Estado de finalización actualizado' });
+  } catch (error) {
+    console.error('Error updating completion status:', error.message);
+    res.status(500).json({ error: 'Error updating completion status: ' + error.message });
+  }
+});
 
 // Programar la tarea para que se ejecute cada domingo a las 23:00 (11:00 PM) hora de Santiago
 cron.schedule('0 23 * * SUN', () => {
