@@ -51,14 +51,14 @@ app.post('/users', async (req, res) => {
   const transporter = nodemailer.createTransport({
     service: 'Gmail',
     auth: {
-      user: 'mauricie.seba@gmail.com', // Tu email
+      user: process.env.EMAIL, // Tu email
       pass: 'yctj sdjx qols rbdf', // Tu contraseña
     },
   });
 
   // Configurar el contenido del correo electrónico
   const mailOptions = {
-    from: 'mauricie.seba@gmail.com',
+    from: process.env.EMAIL,
     to: email,
     subject: 'Cuenta Creada con Éxito',
     text: `Su cuenta ha sido creada con éxito. Su usuario es ${username} y su contraseña es ${password}`,
@@ -117,14 +117,14 @@ app.post('/forgot-password', async (req, res) => {
   const transporter = nodemailer.createTransport({
     service: 'Gmail',
     auth: {
-      user: 'mauricie.seba@gmail.com', // Tu email
+      user: process.env.EMAIL, // Tu email
       pass: 'yctj sdjx qols rbdf', // Tu contraseña
     },
   });
 
   // Configurar el contenido del correo electrónico
   const mailOptions = {
-    from: 'mauricie.seba@gmail.com',
+    from: process.env.EMAIL,
     to: email,
     subject: 'Recuperación de contraseña',
     text: `Haz clic en el siguiente enlace para restablecer tu contraseña: https://main--mathysbarber.netlify.app/reset-password/${token}`,
@@ -354,7 +354,7 @@ app.post('/reservations', async (req, res) => {
     const transporter = nodemailer.createTransport({
       service: 'Gmail',
       auth: {
-        user: 'mauricie.seba@gmail.com', // Tu email
+        user: process.env.EMAIL, // Tu email
         pass: 'yctj sdjx qols rbdf', // Tu contraseña
       },
     });
@@ -373,7 +373,7 @@ app.post('/reservations', async (req, res) => {
     // Extraer el correo electrónico del resultado
     const userEmail = userResult.rows[0].email;
     const mailOptions = {
-      from: 'mauricie.seba@gmail.com',
+      from: process.env.EMAIL,
       to: userEmail,
       subject: 'Reserva Realizada con Éxito',
       text: `Su reserva ha sido realizada con éxito. Su hora es a las ${horaEspecifica} del día ${date}`,
