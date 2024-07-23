@@ -4,7 +4,6 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); // Para crear el token JWT
 const cron = require('node-cron');
 const moment = require('moment-timezone');
