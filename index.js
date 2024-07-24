@@ -8,6 +8,9 @@ const jwt = require('jsonwebtoken'); // Para crear el token JWT
 const cron = require('node-cron');
 const moment = require('moment-timezone');
 
+const PDFDocument = require('pdfkit');
+const stream = require('stream');
+
 dotenv.config();
 
 const app = express();
@@ -52,7 +55,7 @@ app.post('/users', async (req, res) => {
     service: 'Gmail',
     auth: {
       user: process.env.EMAIL, // Tu email
-      pass: 'yctj sdjx qols rbdf', // Tu contraseña
+      pass: process.env.PASSWORD, // Tu contraseña
     },
   });
 
@@ -118,7 +121,7 @@ app.post('/forgot-password', async (req, res) => {
     service: 'Gmail',
     auth: {
       user: process.env.EMAIL, // Tu email
-      pass: 'yctj sdjx qols rbdf', // Tu contraseña
+      pass: process.env.PASSWORD, // Tu contraseña
     },
   });
 
@@ -355,7 +358,7 @@ app.post('/reservations', async (req, res) => {
       service: 'Gmail',
       auth: {
         user: process.env.EMAIL, // Tu email
-        pass: 'yctj sdjx qols rbdf', // Tu contraseña
+        pass: process.env.PASSWORD, // Tu contraseña
       },
     });
 
@@ -501,12 +504,195 @@ app.delete('/delete-reservation', async (req, res) => {
   }
 });
 
+app.get('/obtener-dia', async (req, res) => {
+  const {barberId} = req.query;
+  try {
+    // Obtén la fecha actual y formateala como YYYY-MM-DD
+    const currentDate = moment().format('YYYY-MM-DD');
+    
+    // obtener las reservas del dia actual currentDate
+
+    const result = await pool.query(`
+      SELECT b.booking_id, b.user_id, u.username as user_name,u.phone as user_phone, b.barber_id, bu.username as barber_name, 
+             b.cut_id, c.name as cut_name, b.date_id, to_char(d.date, 'YYYY/MM/DD') as date, 
+             b.hour_id, h.hour, b.time_done
+      FROM bookings b
+      JOIN users u ON b.user_id = u.user_id
+      JOIN users bu ON b.barber_id = bu.user_id
+      JOIN cuts c ON b.cut_id = c.cut_id
+      JOIN date d ON b.date_id = d.date_id
+      JOIN hours h ON b.hour_id = h.hour_id
+      WHERE d.date = $1 AND b.barber_id = $2
+    `, [currentDate, barberId]);
+
+    // sacar las reservas del dia actual
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error al obtener las reservas del día actual', error);
+    res.status(500).json({ error: 'Error al obtener las reservas del día actual' });
+  }
+});
+
+
+const generateBarberBookings = async () => {
+  try {
+    // Obtener la fecha actual
+    const currentDate = moment().tz('America/Santiago');
+    const startOfWeek = currentDate.startOf('isoWeek').format('YYYY-MM-DD'); // Lunes de la semana actual
+    const endOfWeek = currentDate.endOf('isoWeek').format('YYYY-MM-DD'); // Domingo de la semana actual
+
+    // Obtener todos los barberos
+    const barbersResult = await pool.query(
+      'SELECT user_id, username FROM users WHERE role IN ($1, $2)',
+      ['barber', 'admin']
+    );
+
+    // Recorrer cada barbero para obtener sus reservas
+    const reservationsPromises = barbersResult.rows.map(async (barber) => {
+      const result = await pool.query(`
+        SELECT b.booking_id, b.user_id, u.username as user_name, b.barber_id, bu.username as barber_name, 
+               b.cut_id, c.name as cut_name, b.date_id, TO_CHAR(d.date, 'YYYY-MM-DD') as date, 
+               b.hour_id, h.hour, b.time_done
+        FROM bookings b
+        JOIN users u ON b.user_id = u.user_id
+        JOIN users bu ON b.barber_id = bu.user_id
+        JOIN cuts c ON b.cut_id = c.cut_id
+        JOIN date d ON b.date_id = d.date_id
+        JOIN hours h ON b.hour_id = h.hour_id
+        WHERE b.barber_id = $1
+          AND d.date >= $2
+          AND d.date <= $3
+        ORDER BY d.date, h.hour
+      `, [barber.user_id, startOfWeek, endOfWeek]);
+
+      return {
+        barber_id: barber.user_id,
+        barber_name: barber.username,
+        reservations: result.rows
+      };
+    });
+
+    // Esperar a que todas las promesas se resuelvan
+    const reservationsByBarber = await Promise.all(reservationsPromises);
+
+    // Crear y enviar el PDF por correo electrónico
+    await sendReservationsByEmail(reservationsByBarber);
+
+    console.log('Weekly reservations email sent successfully.');
+  } catch (error) {
+    console.error('Error generating weekly reservations:', error.message);
+  }
+};
+
+const sendReservationsByEmail = async (reservations) => {
+  // Configurar el transportador de Nodemailer
+  const transporter = nodemailer.createTransport({
+    service: 'Gmail',
+    auth: {
+      user: process.env.EMAIL,
+      pass: process.env.PASSWORD, // Cambia esto por tu contraseña o token
+    },
+  });
+
+  // Crear el documento PDF
+  const doc = new PDFDocument();
+  const pdfStream = new stream.PassThrough();
+  doc.pipe(pdfStream);
+
+  // Usar una fuente estándar
+  doc.font('Helvetica');
+
+  reservations.forEach(barber => {
+    doc.addPage()
+      .fontSize(16)
+      .text(`Reservas para el barbero ${barber.barber_name}`, { align: 'center' })
+      .moveDown();
+
+    // Calcular el total de reservas y las completadas
+    const totalBookings = barber.reservations.length;
+    const completedBookings = barber.reservations.filter(reservation => reservation.time_done).length;
+
+    // Calcular el desglose por tipo de corte
+    const cutTypes = barber.reservations.reduce((acc, reservation) => {
+      if (!acc[reservation.cut_name]) {
+        acc[reservation.cut_name] = 0;
+      }
+      acc[reservation.cut_name]++;
+      return acc;
+    }, {});
+
+    // Agregar el resumen al inicio de la página
+    doc.fontSize(12)
+      .text(`Total de reservas: ${totalBookings}`)
+      .text(`Reservas completadas: ${completedBookings}`)
+      .moveDown();
+
+    // Agregar el desglose por tipo de corte
+    doc.text('Desglose por tipo de corte:')
+      .moveDown();
+    Object.keys(cutTypes).forEach(cutType => {
+      doc.text(`${cutType}: ${cutTypes[cutType]}`);
+    });
+    
+    doc.moveDown()
+      .text('------------------------------')
+      .moveDown();
+
+    // Agregar las reservas
+    barber.reservations.forEach(reservation => {
+      doc.text('------------------------------')
+        .text(`Fecha: ${reservation.date}`)
+        .text(`Cliente: ${reservation.user_name}`)
+        .text(`Hora: ${reservation.hour}`)
+        .text(`Tipo de Corte: ${reservation.cut_name}`)
+        .text(`Completada: ${reservation.time_done ? 'Sí' : 'No'}`)
+        .text('------------------------------')
+        .moveDown();
+    });
+  });
+
+  doc.end();
+
+  // Configurar las opciones del correo electrónico
+  const mailOptions = {
+    from: process.env.EMAIL,
+    to: process.env.EMAILTO,
+    subject: 'Reservas Semanales',
+    text: 'Adjunto encontrarás el PDF con el resumen de reservas semanales.',
+    attachments: [
+      {
+        filename: 'reservas_semanales.pdf',
+        content: pdfStream,
+      },
+    ],
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log('Reservations email sent successfully.');
+  } catch (error) {
+    console.error('Error sending reservations email:', error);
+  }
+};
+
+
+
+
 // Programar la tarea para que se ejecute cada domingo a las 23:00 (11:00 PM) hora de Santiago
 cron.schedule('0 23 * * SUN', () => {
     console.log('Generating weekly dates...');
     generateWeeklyDates();
+    
 }, {
     timezone: "America/Santiago"
+});
+
+cron.schedule('0 22 * * SUN', () => {
+  console.log('Generating weekly dates...');
+  generateBarberBookings();
+  
+}, {
+  timezone: "America/Santiago"
 });
 
 
